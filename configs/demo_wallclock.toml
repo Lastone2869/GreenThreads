@@ -1,0 +1,5 @@
+# No-API fallback for long-running tracking: real-time clock, intensity replayed from
+# the recorded 2020 trace at today's date/hour (clearly labelled "replayed" in logs).
+[carbon]
+source = "csv"
+csv_path = "data/traces/in-so_synthetic_2020_hourly.csv"

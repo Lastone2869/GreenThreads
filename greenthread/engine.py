@@ -28,6 +28,57 @@ def _busy_cpu_seconds() -> float:
     return sum(ct) - ct.idle - getattr(ct, "iowait", 0.0)
 
 
+class BackgroundLoadMeter:
+    """CPU utilisation of *other* processes (0..1 of all logical CPUs).
+
+    The model's `bg_load` feature means "how busy the machine is with work that is not
+    this job" (in training it is measured before the job starts, with a background
+    load running). At run time the engine's own CPU use (model inference, launching
+    processes) and its running jobs must not count, or every prediction is inflated.
+    other = d(total busy CPU-s) - d(CPU-s of this process and its children), over a
+    sliding window of >= `window_s`.
+    """
+
+    def __init__(self, ncpu: int, window_s: float = 2.0):
+        self.ncpu, self.window = max(1, ncpu), window_s
+        self.me = psutil.Process()
+        self.hist: list[tuple[float, float, float]] = []
+        self.sample()
+
+    def _own_cpu(self) -> float:
+        tot = 0.0
+        procs = [self.me]
+        try:
+            procs += self.me.children(recursive=True)
+        except psutil.Error:
+            pass
+        for p in procs:
+            try:
+                t = p.cpu_times()
+                tot += t.user + t.system
+            except psutil.Error:
+                pass
+        return tot
+
+    def sample(self):
+        now = time.monotonic()
+        self.hist.append((now, _busy_cpu_seconds(), self._own_cpu()))
+        while len(self.hist) > 2 and now - self.hist[1][0] >= self.window:
+            self.hist.pop(0)
+
+    def value(self) -> float:
+        self.sample()
+        if len(self.hist) < 2:
+            return 0.0
+        (t0, b0, o0), (t1, b1, o1) = self.hist[0], self.hist[-1]
+        if t1 - t0 < 0.2:
+            return 0.0
+        # own children that exited inside the window take their CPU time with them,
+        # so clamp; the error only ever over-states load, never hides it
+        other = max(0.0, (b1 - b0) - max(0.0, o1 - o0))
+        return float(min(1.0, other / ((t1 - t0) * self.ncpu)))
+
+
 @dataclass
 class _Running:
     job: Job
@@ -43,6 +94,8 @@ class _Running:
     end_t: float | None = None
     output: str = ""
     sys_busy1: float = 0.0
+    meter_j0: float | None = None
+    meter_j1: float | None = None
 
 
 class Engine:
@@ -52,7 +105,10 @@ class Engine:
         self.cfg, self.backend, self.policy = cfg, backend, policy
         self.signal, self.source, self.ledger = signal, source, ledger
         self.pm, self.sampler = power_model, sampler
+        self.meter = backend.energy_meter()          # RAPL on Linux when readable
+        self.meter_idle_w: float | None = None       # package idle power for the meter
         self.caps: Capabilities = backend.capabilities()
+        self.bg = BackgroundLoadMeter(self.caps.logical_cpus)
         allowed = set(cfg.scheduler.allow_modes)
         self.modes = [m.value for m in self.caps.supported_modes() if m.value in allowed]
         self.log_path = Path(log_path) if log_path else None
@@ -93,8 +149,7 @@ class Engine:
 
     def _ctx(self) -> PolicyContext:
         ps = self.power()
-        mctx = Ctx(self.caps.logical_cpus, self.caps.physical_cores,
-                   psutil.cpu_percent(interval=None) / 100.0, ps.on_ac)
+        mctx = Ctx(self.caps.logical_cpus, self.caps.physical_cores, self.bg.value(), ps.on_ac)
         return PolicyContext(self.now(), ps.on_ac, None if ps.percent is None else ps.percent / 100.0,
                              self.ledger.intensity, self.signal, mctx, self.modes)
 
@@ -118,7 +173,7 @@ class Engine:
             self.log(f"WARN {job.id}: control failures {applied.failures} -> continuing in degraded mode")
         ps = self.power()
         r = _Running(job, dec, proc, self.now(), ps.on_ac, dec.mode, applied.actions, applied.failures,
-                     sys_busy0=_busy_cpu_seconds())
+                     sys_busy0=_busy_cpu_seconds(), meter_j0=self.meter.read_j() if self.meter else None)
         proc.stdin.write("GO\n")
         proc.stdin.flush()
 
@@ -127,6 +182,8 @@ class Engine:
             proc.wait()
             r.end_t = self.now()
             r.sys_busy1 = _busy_cpu_seconds()
+            if self.meter:
+                r.meter_j1 = self.meter.read_j()
         threading.Thread(target=waiter, daemon=True).start()
         self.log(f"start {job.id:<10} mode={dec.mode:<8} {dec.reason} {applied.actions}")
         return r
@@ -171,7 +228,16 @@ class Engine:
             if dev is not None:
                 share = min(1.0, cpu_s / max(r.sys_busy1 - r.sys_busy0, 1e-6))
                 e_meas = max(0.0, dev - self.sampler.idle_w * dur / 3600.0) * share
-        energy, src = (e_meas, "measured-battery") if e_meas is not None else (e_model, "model")
+        e_rapl = None
+        if r.meter_j0 is not None and r.meter_j1 is not None and self.meter_idle_w is not None:
+            share = min(1.0, cpu_s / max(r.sys_busy1 - r.sys_busy0, 1e-6))
+            e_rapl = max(0.0, (r.meter_j1 - r.meter_j0) / 3600.0 - self.meter_idle_w * dur / 3600.0) * share
+        if e_meas is not None:
+            energy, src = e_meas, "measured-battery"
+        elif e_rapl is not None:
+            energy, src = e_rapl, "measured-rapl"
+        else:
+            energy, src = e_model, "model"
         if r.on_ac:
             inten = self.source.mean_true(r.start_t, r.end_t)
         else:
@@ -205,11 +271,28 @@ class Engine:
         results: list[JobResult] = []
         sc = self.cfg.scheduler
         replan_every = max(1.0, sc.defer_step_s / 2)
+        # feed the carbon signal observations every 15 min of grid time (scored later)
+        tick_every = max(0.5, 900.0 / getattr(self.source, "scale", 1.0))
+        last_tick = -1e9
+        # recorded trace: let the signal learn from the 14 days before the run (as in the
+        # simulator); a live source back-fills its 24 h API history on the first tick instead
+        from .carbon import CSVReplaySource
+        if isinstance(self.source, CSVReplaySource) and hasattr(self.signal, "tick") and self.signal.n.sum() == 0:
+            step = 3600.0 / self.source.scale
+            for k in range(14 * 24, 0, -1):
+                self.signal.tick(-k * step)
         try:
             while pending or planned or running:
                 now = self.now()
+                if hasattr(self.signal, "tick") and now - last_tick >= tick_every:
+                    try:
+                        self.signal.tick(now)
+                    except Exception as e:  # never let telemetry break scheduling
+                        self.log(f"WARN carbon signal tick failed: {e}")
+                    last_tick = now
                 if timeout_s and now > timeout_s:
                     raise TimeoutError("engine timeout")
+                self.bg.sample()
                 # admit
                 while pending and pending[0].arrival_s <= now:
                     job = pending.pop(0)
@@ -253,4 +336,6 @@ class Engine:
             for r in running:
                 if r.proc.poll() is None:
                     r.proc.kill()
+            if hasattr(self.signal, "save"):
+                self.signal.save()
         return results

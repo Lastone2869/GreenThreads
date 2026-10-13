@@ -23,7 +23,7 @@ from .telemetry import PowerSampler
 
 FIELDS = ["sample_id", "timestamp", "kind", "units", "threads", "mode", "runtime_s", "cpu_s",
           "bg_load", "bg_threads", "on_ac", "logical_cpus", "physical_cores", "energy_wh_measured",
-          "energy_wh_model", "battery_pct", "control_failures", "machine"]
+          "energy_wh_model", "energy_source", "battery_pct", "control_failures", "machine"]
 
 
 class FixedModePolicy(Policy):
@@ -68,7 +68,7 @@ def collect(cfg: Config, backend: Backend, out_csv: str | Path, reps: int = 2,
             matrix: dict | None = None, thread_opts: list[int] | None = None,
             bg_opts: list[int] | None = None, scale: float = 1.0, seed: int = 0,
             measure_idle_s: float = 0.0, verbose: bool = True, limit: int | None = None,
-            idle_w: float | None = None) -> Path:
+            idle_w: float | None = None, rapl_idle_w: float | None = None) -> Path:
     caps = backend.capabilities()
     modes = [m.value for m in caps.supported_modes() if m.value in cfg.scheduler.allow_modes]
     matrix = matrix or DEFAULT_MATRIX
@@ -105,6 +105,7 @@ def collect(cfg: Config, backend: Backend, out_csv: str | Path, reps: int = 2,
             with BackgroundLoad(bg):
                 bg_load = psutil.cpu_percent(interval=0.5) / 100.0
                 eng = Engine(cfg, backend, FixedModePolicy(mode), sig, src, ledger, pm, sampler, verbose=False)
+                eng.meter_idle_w = rapl_idle_w
                 eng.cfg.scheduler.escalate = False
                 job = Job(f"c{i}", kind, units, threads, 0.0, 1e9)
                 res = eng.run([job])[0]
@@ -113,7 +114,8 @@ def collect(cfg: Config, backend: Backend, out_csv: str | Path, reps: int = 2,
                          "units": units, "threads": threads, "mode": mode, "runtime_s": round(res.runtime_s, 4),
                          "cpu_s": round(res.cpu_s, 4), "bg_load": round(bg_load, 3), "bg_threads": bg,
                          "on_ac": int(res.on_ac), "logical_cpus": n, "physical_cores": caps.physical_cores,
-                         "energy_wh_measured": "" if res.energy_source != "measured-battery" else round(res.energy_wh, 6),
+                         "energy_wh_measured": "" if not res.energy_source.startswith("measured") else round(res.energy_wh, 6),
+                         "energy_source": res.energy_source,
                          "energy_wh_model": round(res.energy_wh_model, 6),
                          "battery_pct": "" if not ps or ps.percent is None else ps.percent,
                          "control_failures": ";".join(res.control_failures), "machine": machine})

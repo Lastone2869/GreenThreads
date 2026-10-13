@@ -62,7 +62,7 @@ def test_outage_serves_stale_value_and_confidence_decays(trace_csv):
     src = CSVReplaySource(trace_csv, "2020-01-01T09:00:00", 3600, outages=[(1800, 99999)])
     s = src.latest(7200)
     assert not s.available and s.observed_age_s == pytest.approx(5400)
-    sig = CarbonSignal(src, prior=300, freshness_half_life_s=3600)
+    sig = CarbonSignal(src, prior=300, freshness_half_life_s=3600, adaptive=False)
     eff, sd = sig.plan_curve(7200, [0.0])
     c = 0.5 ** 1.5
     # the forecast issued before the outage still covers 'now' (noise-free here),
@@ -113,3 +113,52 @@ def test_config_rejects_unknown_key(tmp_path):
     p.write_text("[weights]\ncarbon = 2.0\n[carbon]\nsource='static'\n")
     cfg = load_config(p)
     assert cfg.weights.carbon == 2.0 and cfg.carbon.source == "static"
+
+
+# ---------------------------------------------------------------- adaptive signal
+def _year_trace(tmp_path, name="y.csv"):
+    import pandas as pd
+    ts = pd.date_range("2020-01-01", periods=24 * 60, freq="1h")
+    v = 300 + 150 * np.sin((ts.hour.values - 6) / 24 * 2 * np.pi)       # clean diurnal cycle
+    p = tmp_path / name
+    pd.DataFrame({"timestamp": ts.strftime("%Y-%m-%dT%H:%M:%S"), "carbon_intensity": v, "zone": "T"}).to_csv(p, index=False)
+    return p
+
+
+def _warm(sig, days=20):
+    for h in range(days * 24):
+        sig.tick(h * 3600.0)
+
+
+def test_adaptive_starts_like_fixed_decay(tmp_path):
+    src = CSVReplaySource(_year_trace(tmp_path), None, 3600)
+    sig = CarbonSignal(src, prior=300, forecast_half_life_h=12, spread=100)
+    for lead in (1.0, 6.0, 24.0):
+        assert sig.confidence(0, lead * 3600) == pytest.approx(0.5 ** (lead / 12), rel=1e-6)
+
+
+def test_adaptive_learns_to_trust_a_good_forecast(tmp_path):
+    src = CSVReplaySource(_year_trace(tmp_path), None, 3600)
+    sig = CarbonSignal(src, prior=300, forecast_half_life_h=12, spread=100)
+    c0 = sig.confidence(0, 12 * 3600)
+    _warm(sig)
+    assert sig.confidence(0, 12 * 3600) > 0.95 > c0
+    assert sig.n.sum() > 100
+
+
+def test_adaptive_learns_to_distrust_a_misleading_forecast(tmp_path):
+    src = CSVReplaySource(_year_trace(tmp_path), None, 3600, forecast_shift_h=12)
+    sig = CarbonSignal(src, prior=300, forecast_half_life_h=12, spread=100)
+    _warm(sig)
+    assert sig.confidence(0, 6 * 3600) < 0.2
+    # the fallback is the hour-of-day climatology, which here is exactly right
+    t = 25 * 24 * 3600.0
+    eff, _ = sig.plan_curve(t, [6 * 3600.0])
+    assert eff[0] == pytest.approx(src.true_value(t + 6 * 3600), abs=15)
+
+
+def test_unaware_signal_is_not_learning(tmp_path):
+    src = CSVReplaySource(_year_trace(tmp_path), None, 3600)
+    sig = CarbonSignal(src, prior=300, uncertainty_aware=False)
+    _warm(sig, 3)
+    assert sig.n.sum() == 0

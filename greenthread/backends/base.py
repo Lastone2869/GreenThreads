@@ -99,6 +99,30 @@ class Backend:
     def cleanup(self, pid: int) -> None:
         """Release per-process resources (e.g. job handles)."""
 
+    def energy_meter(self):
+        """A meter with read_j() -> cumulative joules (e.g. RAPL), or None."""
+        return None
+
+    def probe(self, caps: "Capabilities") -> dict:
+        """Launch a throwaway sleeper and check every supported control really applies."""
+        import subprocess
+        import sys
+        import time
+        proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(5)"])
+        try:
+            time.sleep(0.2)
+            out = {}
+            for m in caps.supported_modes() + [Mode.BOOST]:
+                r = self.apply(proc.pid, m, caps)
+                out[m.value] = {"ok": r.ok, "actions": r.actions, "failures": r.failures}
+            if hasattr(self, "cap_cpu_rate"):
+                out["cpu_rate_cap"] = self.cap_cpu_rate(proc.pid, 50)
+            return out
+        finally:
+            proc.kill()
+            proc.wait()
+            self.cleanup(proc.pid)
+
     # helpers shared by backends -------------------------------------------------
     @staticmethod
     def half_core_logicals(caps: Capabilities) -> list[int]:

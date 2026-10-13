@@ -1,4 +1,4 @@
-# GreenThread — Carbon- and Battery-Aware Multicore Job Scheduler for Windows 11
+# GreenThread — Carbon- and Battery-Aware Multicore Job Scheduler (Windows 11 and Linux)
 
 GreenThread is a user-mode scheduler for CPU-heavy jobs on a Windows 11 laptop. For every
 job it decides **when to start** (only if the job is marked deferrable) and **how to run**
@@ -6,18 +6,20 @@ job it decides **when to start** (only if the job is marked deferrable) and **ho
 learned runtime predictions and the grid's carbon intensity, so that attributable carbon and
 battery drain fall while deadlines and interactive responsiveness are protected.
 
-No Linux, WSL, VM, dual boot, admin rights or kernel changes: only documented Win32 APIs.
+Runs natively on Windows 11 (documented Win32 APIs) and Linux (user-mode syscalls and sysfs). No WSL, VM, dual boot, admin rights, driver or kernel changes.
 
 ## The algorithm in one paragraph (R-BACI)
 
 Risk-bounded Battery- And Carbon-Intensity-aware scheduling picks the (start offset, mode)
 minimising a normalised cost of carbon + battery + latency + deferral overhead, subject to
-**start + predicted 90th-percentile runtime + margin ≤ deadline**. Carbon forecasts are
-blended toward the long-run mean as they get older or further ahead, and their uncertainty is
-penalised. On battery, emissions are charged at the carbon intensity of the energy *stored in
+**start + predicted 90th-percentile runtime + margin ≤ deadline**. The carbon signal scores
+its own past forecasts and trusts each lead time exactly as much as its measured error allows,
+falling back to the typical value for that hour of day. A non-normal mode is chosen only if its
+predicted saving, shrunk toward what that mode usually achieves, beats the remaining
+uncertainty. On battery, emissions are charged at the carbon intensity of the energy *stored in
 the battery* (the battery carbon ledger), so battery use is neither "zero carbon" nor counted
 twice. If a throttled job's deadline comes at risk the engine escalates it to full speed.
-Full formulation: [`docs/RESEARCH.md`](docs/RESEARCH.md) §5.
+Full formulation: [`docs/RESEARCH.md`](docs/RESEARCH.md) §5; what changed in 1.1: §10.
 
 ## Architecture
 
@@ -49,7 +51,7 @@ Full formulation: [`docs/RESEARCH.md`](docs/RESEARCH.md) §5.
 | Module | Responsibility |
 |---|---|
 | `backends/windows.py` | Win32 controls and discovery (64-bit-safe ctypes signatures, fixed-width structs) |
-| `backends/posix.py` | Same interface on Linux (nice/affinity) for development and CI |
+| `backends/posix.py` | Linux: SCHED_BATCH + util-clamp, sysfs topology/hybrid detection, sysfs battery, RAPL |
 | `carbon.py` | CSV replay (time compression, forecast-error and outage injection), Electricity Maps client with cache, confidence-discounted `CarbonSignal` |
 | `accounting.py` | Battery carbon ledger, attribution rule, power model |
 | `telemetry.py` | Battery sampler, idle baseline, power-model calibration |
@@ -58,30 +60,33 @@ Full formulation: [`docs/RESEARCH.md`](docs/RESEARCH.md) §5.
 | `policy.py` | R-BACI and all baselines/ablations |
 | `engine.py` | Real-process scheduling loop with escalation and replanning |
 | `collect.py`, `experiments.py`, `simulator.py` | Data collection, real experiments, trace-driven simulation |
+| `ledger_study.py` | Battery-ledger field logger, report, and year-long charging-habit study |
+| `report.py` | Rebuilds `docs/TEST_REPORT.md` and hypothesis verdicts from `results/` |
 | `cli.py` | `python -m greenthread …` |
 
-## Quick start (Windows 11)
+## Quick start
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\setup_windows.ps1   # venv, deps, detect, tests
-python -m greenthread detect --probe
-python -m greenthread collect --reps 2        # ~20-40 min, builds training data on YOUR laptop
-python -m greenthread train
-python -m greenthread --config configs\demo.toml run --jobs configs\jobs_demo.json --policy greenthread
+# Windows 11
+powershell -ExecutionPolicy Bypass -File scripts\setup_windows.ps1     # venv, deps, token, detect, tests
+powershell -ExecutionPolicy Bypass -File scripts\run_all_windows.ps1   # full pipeline -> docs\TEST_REPORT.md
 ```
-Full measured pipeline (battery + AC, calibration, experiments, simulation):
-`scripts\run_all_windows.ps1`. Details: [`docs/USER_MANUAL.md`](docs/USER_MANUAL.md).
+```bash
+# Linux
+bash scripts/setup_linux.sh --rapl          # --rapl optional: measured energy on AC (Intel)
+bash scripts/run_all_linux.sh               # full pipeline -> docs/TEST_REPORT.md
+```
+Details: [`docs/USER_MANUAL.md`](docs/USER_MANUAL.md).
 
 ## What has been verified, and where
 
-* 37 automated tests: unit (ABI parsing, carbon mapping, ledger maths, attribution, config),
-  policy properties (interactive never deferred, deadline quantile respected, fallback,
-  vectorised objective = brute force, stale signal ⇒ no deferral), ML, integration with real
-  child processes, Windows backend call sequences against a fake `kernel32`.
-* Real runs and ML training on the development machine (Linux VM) and the trace-driven
-  simulation suite — results and their limits in [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md).
-* **Not yet executed on Windows hardware.** The Windows backend is tested against a mocked
-  kernel32; the first run on the laptop (`setup_windows.ps1`) is the real check.
+* Automated tests (unit, policy properties, ML, real child processes on Linux, Windows backend
+  call sequences against a fake `kernel32`, Linux backend against fake sysfs trees, live API
+  client against mocked responses): `python -m pytest -q`.
+* Real runs, ML training and the simulation suite on the development machine (Linux VM) — see
+  [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md), generated by `python -m greenthread report`.
+* **Not yet executed on Windows hardware or with a live API token.** Both need the target laptop:
+  run `scripts\run_all_windows.ps1` (or the Linux script) and `report` replaces every number.
 
 ## Data
 

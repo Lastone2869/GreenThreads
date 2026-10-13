@@ -26,11 +26,18 @@ class CarbonConfig:
     seconds_per_trace_hour: float = 3600.0   # <3600 compresses the trace for demos
     zone: str = "IN-SO"
     token_env: str = "ELECTRICITYMAPS_TOKEN"
+    token_file: str = "secrets/electricitymaps.token"   # git-ignored; written by the setup scripts
     static_value: float = 700.0
     prior_intensity: float | None = None     # None -> long-run mean of trace / static value
     freshness_half_life_s: float = 3600.0    # confidence halves every half-life of staleness
     forecast_half_life_h: float = 12.0       # forecast confidence halves per 12 h of horizon
     forecast_noise_frac: float = 0.0         # inject forecast error in CSV mode (experiments)
+    forecast_kind: str = "oracle"            # CSV mode: oracle | seasonal | persistence
+    forecast_shift_h: float = 0.0            # CSV mode: phase error of the forecast (experiments)
+    adaptive_confidence: bool = True         # learn forecast trust from observed errors
+    spread: float | None = None              # prior std of intensity (None -> from trace / 15 % of prior)
+    signal_state_path: str = "results/carbon_signal_state.json"
+    log_path: str = "results/carbon_log.csv" # `carbon-log` output (live data becomes a replay trace)
     cache_path: str = "results/carbon_cache.json"
 
 
@@ -56,6 +63,7 @@ class SchedulerConfig:
     max_concurrent: int = 1
     tick_s: float = 0.25
     escalate: bool = True              # drop eco restrictions if deadline at risk
+    mode_gate_kappa: float = 1.0       # non-NORMAL modes judged at exp(kappa*rel_sigma) x predicted energy
     model_path: str = "results/model.pkl"
     allow_modes: list[str] = field(default_factory=lambda: ["NORMAL", "ECO", "HALF", "ECO_HALF", "ECORES"])
 

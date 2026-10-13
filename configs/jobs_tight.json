@@ -1,0 +1,85 @@
+{
+ "description": "Tight-deadline batch, one job every 15 s (no queueing at max_concurrent=1): deadline = deadline_factor x this machine's predicted NORMAL runtime. Slowing down saves energy but is often infeasible. Run with --no-escalate to test the planner's feasibility check alone.",
+ "jobs": [
+  {
+   "id": "t01",
+   "kind": "hash",
+   "units": 2000,
+   "threads": 2,
+   "arrival_s": 0,
+   "deadline_factor": 1.2
+  },
+  {
+   "id": "t02",
+   "kind": "matmul",
+   "units": 150,
+   "threads": 2,
+   "arrival_s": 15,
+   "deadline_factor": 1.6
+  },
+  {
+   "id": "t03",
+   "kind": "compress",
+   "units": 600,
+   "threads": 2,
+   "arrival_s": 30,
+   "deadline_factor": 1.25
+  },
+  {
+   "id": "t04",
+   "kind": "hash",
+   "units": 1500,
+   "threads": 1,
+   "arrival_s": 45,
+   "deadline_factor": 2.2
+  },
+  {
+   "id": "t05",
+   "kind": "matmul",
+   "units": 120,
+   "threads": 2,
+   "arrival_s": 60,
+   "deadline_factor": 1.2
+  },
+  {
+   "id": "t06",
+   "kind": "compress",
+   "units": 500,
+   "threads": 1,
+   "arrival_s": 75,
+   "deadline_factor": 1.4
+  },
+  {
+   "id": "t07",
+   "kind": "hash",
+   "units": 2500,
+   "threads": 2,
+   "arrival_s": 90,
+   "deadline_factor": 1.9
+  },
+  {
+   "id": "t08",
+   "kind": "matmul",
+   "units": 160,
+   "threads": 1,
+   "arrival_s": 105,
+   "deadline_factor": 1.3
+  },
+  {
+   "id": "t09",
+   "kind": "compress",
+   "units": 700,
+   "threads": 2,
+   "arrival_s": 120,
+   "deadline_factor": 2.6
+  },
+  {
+   "id": "t10",
+   "kind": "hash",
+   "units": 1800,
+   "threads": 2,
+   "arrival_s": 135,
+   "deadline_factor": 1.25
+  }
+ ]
+}

@@ -1,0 +1,129 @@
+{
+  "temporal_split": {
+    "n_train": 230,
+    "n_test": 77,
+    "label_noise": {
+      "runtime_log_sd": 0.1080565338226082,
+      "cpu_log_sd": 0.1011864255867153,
+      "replicate_groups": 192
+    },
+    "ml": {
+      "mae_s": 0.06074333963924055,
+      "mape_pct": 9.134078954744828,
+      "pinball_q50": 0.030371669819620275,
+      "pinball_q90": 0.018185696660237435,
+      "coverage_q90": 0.8961038961038961,
+      "mean_upper_margin_pct": 19.51502591117434,
+      "log_err_bias": 0.015204228038410803,
+      "log_err_sd": 0.1341258125270552,
+      "model_log_err_sd": 0.07945765591990671,
+      "rel_sigma": {
+        "NORMAL": 0.0,
+        "ECO_HALF": 0.020718560540848488,
+        "ECO": 0.04154817515415632,
+        "HALF": 0.15114670570542707
+      }
+    },
+    "table": {
+      "mae_s": 0.11232938311688312,
+      "mape_pct": 19.924105940242402,
+      "pinball_q50": 0.05616469155844156,
+      "pinball_q90": 0.03445457352670354,
+      "coverage_q90": 0.8701298701298701,
+      "mean_upper_margin_pct": 36.03082322671883,
+      "log_err_bias": 0.018715859003237398,
+      "log_err_sd": 0.2569735310116113,
+      "model_log_err_sd": 0.23315055466118684,
+      "rel_sigma": {
+        "NORMAL": 0.0,
+        "ECO": 0.2157168759607944,
+        "ECO_HALF": 0.13618095134004993,
+        "HALF": 0.10696022780145441
+      }
+    },
+    "mode_comparison": {
+      "n": 55,
+      "note": "RMSE of log(mode/NORMAL) ratio vs realised paired ratio (includes label noise)",
+      "runtime_ratio_rmse": {
+        "ml_paired": 0.20513962822610715,
+        "ml_direct_difference": 0.18565392482854862,
+        "table": 0.2589640089594868
+      },
+      "cpu_ratio_rmse": {
+        "ml_paired": 0.17460716215743835,
+        "ml_direct_difference": 0.14144632108834895,
+        "table": 0.1642773470469702
+      },
+      "cpu_ratio_model_error_noise_removed": {
+        "ml_direct_difference": 0.06818374193973592,
+        "ml_paired": 0.12300252839738768,
+        "table": 0.10783787677929718
+      }
+    }
+  },
+  "unseen_size_split": {
+    "n_train": 216,
+    "n_test": 96,
+    "label_noise": {
+      "runtime_log_sd": 0.1080565338226082,
+      "cpu_log_sd": 0.1011864255867153,
+      "replicate_groups": 192
+    },
+    "ml": {
+      "mae_s": 0.18936115367782494,
+      "mape_pct": 9.935170141543406,
+      "pinball_q50": 0.09468057683891247,
+      "pinball_q90": 0.085307084298118,
+      "coverage_q90": 0.8958333333333334,
+      "mean_upper_margin_pct": 20.911735715742445,
+      "log_err_bias": -0.06449619528683784,
+      "log_err_sd": 0.12994925953905592,
+      "model_log_err_sd": 0.07218445506473294,
+      "rel_sigma": {
+        "NORMAL": 0.0,
+        "ECO_HALF": 0.021974702515097318,
+        "ECO": 0.13201249558385733,
+        "HALF": 0.02
+      }
+    },
+    "table": {
+      "mae_s": 0.312046875,
+      "mape_pct": 21.640038096671553,
+      "pinball_q50": 0.1560234375,
+      "pinball_q90": 0.09089655946398939,
+      "coverage_q90": 0.9375,
+      "mean_upper_margin_pct": 48.83423779829159,
+      "log_err_bias": 0.08061485068922372,
+      "log_err_sd": 0.27551758769717805,
+      "model_log_err_sd": 0.2534437346408778,
+      "rel_sigma": {
+        "NORMAL": 0.0,
+        "ECO": 0.19888013470708962,
+        "ECO_HALF": 0.05713975352051684,
+        "HALF": 0.05485959788973287
+      }
+    },
+    "mode_comparison": {
+      "n": 72,
+      "note": "RMSE of log(mode/NORMAL) ratio vs realised paired ratio (includes label noise)",
+      "runtime_ratio_rmse": {
+        "ml_paired": 0.19689128100404543,
+        "ml_direct_difference": 0.12816001566116336,
+        "table": 0.2434014620455815
+      },
+      "cpu_ratio_rmse": {
+        "ml_paired": 0.15473074836926717,
+        "ml_direct_difference": 0.14251484674615197,
+        "table": 0.16477738687412863
+      },
+      "cpu_ratio_model_error_noise_removed": {
+        "ml_direct_difference": 0.07037359205380508,
+        "ml_paired": 0.09264753319106596,
+        "table": 0.10859810376126489
+      }
+    }
+  },
+  "ml_inference_ms": 31.486113219998515,
+  "model_size_kb": 2244.833984375,
+  "n_samples": 384
+}

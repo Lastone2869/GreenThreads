@@ -5,8 +5,23 @@
     "os_build": "",
     "logical_cpus": 2,
     "physical_cores": 2,
-    "cpu_model": "Intel(R) Xeon(R) Processor @ 2.10GHz",
-    "cpu_sets": [],
+    "cpu_model": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+    "cpu_sets": [
+      {
+        "id": 0,
+        "group": 0,
+        "logical_index": 0,
+        "core_index": 0,
+        "efficiency_class": 0
+      },
+      {
+        "id": 1,
+        "group": 0,
+        "logical_index": 1,
+        "core_index": 1,
+        "efficiency_class": 0
+      }
+    ],
     "heterogeneous": false,
     "ecoqos": false,
     "priority": true,
@@ -16,7 +31,7 @@
     "battery_energy_counter": false,
     "power_meter": "model",
     "notes": [
-      "Non-Windows backend: ECO = nice(10) only (no EcoQoS); for testing"
+      "util-clamp unsupported/denied by kernel: ECO = SCHED_BATCH + nice 10 only"
     ]
   },
   "supported_modes": [
@@ -32,5 +47,6 @@
     "full_mwh": null,
     "discharge_mw": null,
     "source": "no-battery"
-  }
+  },
+  "energy_meter": null
 }

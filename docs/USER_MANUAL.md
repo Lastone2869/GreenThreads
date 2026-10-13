@@ -9,20 +9,44 @@ down without missing the deadline you set.
 
 | Item | Requirement |
 |---|---|
-| OS | Windows 11 (Windows 10 works with reduced features: LowQoS instead of EcoQoS) |
+| OS | Windows 11 (Windows 10: LowQoS instead of EcoQoS) or Linux (any modern distro) |
 | Python | 3.11 or newer (python.org installer, "Add to PATH" ticked) |
 | Rights | Normal user. No admin, no driver, no WSL, no kernel changes |
 | Hardware | Any x86-64 laptop. Hybrid CPUs (Intel 12th gen+) additionally get the `ECORES` mode |
-| Optional | Electricity Maps API token for live grid data |
+| Optional | Electricity Maps API token for live grid data (India zone `IN-SO` by default) |
 
 ## 2. Install
 
+**Windows 11**
 ```powershell
 cd greenthread
-powershell -ExecutionPolicy Bypass -File scripts\setup_windows.ps1
+powershell -ExecutionPolicy Bypass -File scripts\setup_windows.ps1            # asks for the API token (Enter to skip)
+powershell -ExecutionPolicy Bypass -File scripts\setup_windows.ps1 -Token "abc123"
 ```
-This creates `.venv`, installs dependencies, prints the detected capabilities and runs the test suite.
 Activate later with `.\.venv\Scripts\Activate.ps1`.
+
+**Linux**
+```bash
+cd greenthread
+bash scripts/setup_linux.sh                      # asks for the token
+bash scripts/setup_linux.sh --token abc123 --rapl   # --rapl: measured energy via Intel RAPL (sudo, until reboot)
+```
+Activate later with `source .venv/bin/activate`.
+
+Both create `.venv`, install dependencies, store the token in `secrets/electricitymaps.token`
+(git-ignored; an `ELECTRICITYMAPS_TOKEN` environment variable also works), print detected
+capabilities with a live control probe, and run the test suite.
+
+## 2a. Full measurement pipeline (fills docs/TEST_REPORT.md)
+
+| | Windows | Linux |
+|---|---|---|
+| Everything (pauses to tell you when to unplug / plug in) | `scripts\run_all_windows.ps1` | `bash scripts/run_all_linux.sh` |
+| Days of background logging (battery ledger + live India grid) | `scripts\track_live_windows.ps1` | `bash scripts/track_live_linux.sh 72` |
+| Rebuild the report after any step | `python -m greenthread report` | same |
+
+Start fully charged and allow about 3–4 hours (most of it unattended). `report` rewrites
+`docs/TEST_REPORT.md` from `results/`, including the hypothesis verdicts.
 
 ## 3. Commands
 
@@ -40,9 +64,17 @@ All commands: `python -m greenthread [--config FILE] [--backend auto|windows|nul
 | `experiment --jobs FILE --reps N` | Runs all baselines N times in randomised order and writes `results/experiment_<tag>/summary.md`. |
 | `simulate --seeds 10 --days 14 [--metrics results/model_metrics.json]` | Trace-driven simulation suite (baselines, ablations, uncertainty stress, battery levels, prediction-error sweep) with plots. |
 | `ledger` | Shows the battery carbon ledger (energy stored and its carbon intensity). |
+| `ledger-track --hours 72` | Logs battery charge/discharge and grid carbon every minute and keeps the ledger current. Run during normal use for days. |
+| `ledger-report` | Compares battery carbon counted as zero / at time of use / by the ledger on that log. |
+| `ledger-study` | Year-long simulation of four charging habits on the recorded grid traces. |
+| `carbon-log --hours 24` | (live config) Appends live hourly grid intensity to `results/carbon_log.csv`, a real trace you can replay. |
+| `report` | Regenerates `docs/TEST_REPORT.md` from all results. |
+| `cross-machine --model PATH` | Applies another machine's model to this machine's data (shows why to retrain locally). |
+| `experiment ... --no-escalate` | Turns off runtime escalation to test the planner's deadline check alone. |
 
 Policies: `default`, `heuristic`, `carbon_only`, `battery_only`, `combined_noai`, `greenthread`,
-and ablations `gt_no_uncertainty`, `gt_no_quantile`, `gt_no_ml`, `gt_no_defer`, `gt_no_modes`,
+`greenthread_v1` (version 1 for before/after), and ablations `gt_no_uncertainty`,
+`gt_fixed_conf`, `gt_no_gate`, `gt_no_quantile`, `gt_no_ml`, `gt_no_defer`, `gt_no_modes`,
 `gt_no_carbon`, `gt_no_battery`.
 
 ## 4. Writing a job file
@@ -57,6 +89,9 @@ and ablations `gt_no_uncertainty`, `gt_no_quantile`, `gt_no_ml`, `gt_no_defer`, 
 * `kind`: `hash`, `compress`, `matmul` (CPU workloads) or `probe` (interactive latency probe; `units` = seconds).
 * `deferrable: true` is the **only** way a job may be delayed. Without it a job always starts immediately.
 * `interactive: true` jobs are never delayed or throttled.
+* `deadline_factor: 1.3` instead of `relative_deadline_s` sets the deadline to 1.3 × this
+  machine's predicted normal runtime, so a job file is equally tight on any laptop
+  (`configs/jobs_tight.json`).
 
 ## 5. Configuration (TOML)
 
@@ -82,7 +117,9 @@ safety_margin_s = 2.0
 max_concurrent = 1
 escalate = true                    # remove EcoQoS/core limits if a deadline becomes at risk
 ```
-Live grid data: `configs/india_live.toml` (zone `IN-SO`) plus `$env:ELECTRICITYMAPS_TOKEN = "..."`.
+Live grid data: `configs/india_live.toml` (zone `IN-SO`; change `zone` for other Indian
+regions: `IN-NO`, `IN-WE`, `IN-EA`, `IN-NE`). Without a forecast in your API plan GreenThread
+builds a "same hour yesterday" forecast from the 24 h history and learns how far to trust it.
 
 ## 6. Demonstration script (Review II)
 
@@ -100,7 +137,10 @@ probe staying NORMAL, the per-job priority/affinity in Task Manager's Details ta
 
 | Situation | Behaviour |
 |---|---|
-| No internet / API error / no token | Last cached value is used, its confidence decays with age, effective intensity converges to the prior, deferral stops paying off, jobs run now. `carbon` command shows the error. |
+| No internet / API error / no token | Last cached value is used; its trust is judged by the measured error at that data age, so the effective intensity moves to the hour-of-day climatology (or the prior with no history) and deferral stops paying off. `carbon` shows the error and the learned confidence table. |
+| Bad token (401) / endpoint not in plan (403) | Reported once; forecast falls back to "same hour yesterday" from history; nothing crashes. |
+| Linux kernel without util-clamp, or intel_pstate governor | ECO = SCHED_BATCH + nice only (noted by `detect`); calibration then shows whether it saves energy. |
+| RAPL not readable (Linux) | Energy from battery discharge on battery, power model on AC. `setup_linux.sh --rapl` enables it. |
 | No battery or BatteryStatus WMI class missing | Energy is estimated with the utilisation power model; results are labelled `model`. |
 | Homogeneous CPU (no E-cores) | `ECORES` mode is not offered; `HALF`/`ECO` are used. |
 | Windows 10 | The same API sets LowQoS instead of EcoQoS (labelled in the log). |
@@ -117,3 +157,6 @@ probe staying NORMAL, the per-job priority/affinity in Task Manager's Details ta
 * `experiment_<tag>/results.csv`, `summary.csv`, `summary.md`
 * `simulation/*.csv.gz`, `*_summary.csv`, `SIMULATION_RESULTS.md`, `*.png`
 * `battery_ledger.json`, `power_model.json`, `idle_w.json`
+* `ledger_log.csv`, `ledger_report.json`, `ledger/LEDGER_STUDY.md`
+* `carbon_log.csv` (live India trace), `carbon_signal_state.json` (learned forecast trust)
+* `archive/<machine>/` — results from other machines

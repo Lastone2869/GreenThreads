@@ -382,16 +382,4 @@ class WindowsBackend(Backend):  # pragma: no cover - requires Windows
 
 
 def probe_controls(backend: WindowsBackend, caps: Capabilities) -> dict:  # pragma: no cover
-    """Launch a throwaway sleeper and verify every control actually succeeds."""
-    proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(5)"])
-    try:
-        time.sleep(0.2)
-        out = {}
-        for m in caps.supported_modes() + [Mode.BOOST]:
-            r = backend.apply(proc.pid, m, caps)
-            out[m.value] = {"ok": r.ok, "actions": r.actions, "failures": r.failures}
-        out["cpu_rate_cap"] = backend.cap_cpu_rate(proc.pid, 50)
-        return out
-    finally:
-        proc.kill()
-        backend.cleanup(proc.pid)
+    return backend.probe(caps)

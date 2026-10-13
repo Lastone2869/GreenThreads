@@ -6,7 +6,7 @@
     "p_core_w": 4.5,
     "eco_power_ratio": 0.58,
     "eco_slowdown": 1.35,
-    "runtime_noise": 0.1,
+    "runtime_noise": 0.11905595492672125,
     "modes": [
       "NORMAL",
       "ECO",
@@ -14,13 +14,25 @@
       "ECO_HALF"
     ]
   },
-  "pred_sigma": {
-    "source": "results/model_metrics.json",
-    "ml": 0.14514681325083098,
-    "table": 0.2569735310116113
+  "predictor_errors": {
+    "sigma": {
+      "ml": 0.08178079187103357,
+      "table": 0.21191060362012698
+    },
+    "sigma_rel": {
+      "ml": 0.02,
+      "table": 0.09773483956606956
+    },
+    "bias": {
+      "ml": 0.026795795044137767,
+      "table": 0.027772982016398322
+    },
+    "noise": 0.11905595492672125,
+    "source": "results/model_metrics.json"
   },
   "days": 14,
   "seeds": 10,
-  "note": "Simulation: energy from SimMachine model (assumptions), carbon from real 2020 traces (DE/GB/FR/US-CAL; ENTSO-E/CAISO via Let's Wait Awhile) and one SYNTHETIC India trace.",
-  "runtime_s": 426.146769285202
+  "windows": "test split: 14-day windows starting 2020-07-01 + 14*seed days (Jul-Dec); tuning split (kappa sweep only): windows from 2020-01-15 (Jan-Jun)",
+  "note": "Simulation: energy from SimMachine model (assumptions unless --calibrate with measured data), carbon from real 2020 traces (DE/GB/FR/US-CAL; ENTSO-E/CAISO via Let's Wait Awhile) and one SYNTHETIC India trace.",
+  "runtime_s": 2199.2509427070618
 }

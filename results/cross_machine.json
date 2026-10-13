@@ -1,0 +1,6 @@
+{
+  "train": "machineA_xeon2.1GHz",
+  "ml_mape_pct": 50.97218918765955,
+  "own_ml_mape_pct": 11.595643629589864,
+  "n": 384
+}

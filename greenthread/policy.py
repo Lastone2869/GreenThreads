@@ -23,6 +23,7 @@ If no (o, m) is feasible the job runs now in NORMAL mode (safe fallback).
 """
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import dataclass, field
 
@@ -53,7 +54,9 @@ class PolicySpec:
     modes: list[str] | None = None   # None -> all supported
     quantile_constraint: bool = True # False -> use q50 for deadline check
     predictor: str = "ml"            # ml | table
-    uncertainty: bool = True
+    uncertainty: bool = True         # use carbon-signal confidence and risk
+    adaptive: bool = True            # confidence learned from observed forecast errors
+    mode_gate: bool = True           # leave NORMAL only if the gain beats prediction error
     weights: Weights = field(default_factory=Weights)
 
 
@@ -91,6 +94,30 @@ class RBACIPolicy(Policy):
     def __init__(self, spec: PolicySpec, predictor: Predictor, cfg: Config):
         self.spec, self.predictor, self.cfg = spec, predictor, cfg
         self.name = spec.name
+
+    def _robust_factor(self, mode: str, ratio: float, sigma: float, kappa: float) -> float:
+        """Multiplier turning the predicted energy ratio E_m/E_NORMAL into the value
+        the decision uses (robust mode selection).
+
+        1. Empirical-Bayes shrinkage: the job's predicted log-ratio (error sd sigma) is
+           pulled toward the mode's population effect mu (spread tau across jobs):
+              lr_post = (tau^2 * lr + sigma^2 * mu) / (tau^2 + sigma^2)
+           An uncertain prediction therefore falls back to "what this mode usually
+           does", not to "do nothing".
+        2. Pessimism: add kappa * posterior sd, so a mode is chosen only when its
+           advantage is larger than what is still unknown (winner's-curse guard).
+        """
+        lr = math.log(max(ratio, 1e-9))
+        mu, tau = getattr(self.predictor, "mode_prior", {}).get(mode, (lr, 0.0))
+        if sigma <= 0:
+            return 1.0
+        if tau <= 0:  # no population information: plain pessimism
+            post, post_sd = lr, sigma
+        else:
+            w = tau ** 2 / (tau ** 2 + sigma ** 2)
+            post = w * lr + (1 - w) * mu
+            post_sd = math.sqrt(tau ** 2 * sigma ** 2 / (tau ** 2 + sigma ** 2))
+        return math.exp(post + kappa * post_sd - lr)
 
     def _feasible(self, off, pred, slack):
         need = pred.qhi if self.spec.quantile_constraint else pred.q50
@@ -176,7 +203,15 @@ class RBACIPolicy(Policy):
             else:
                 c_rel = np.full_like(O, p.energy_wh / e_ref)   # battery path: ledger intensity cancels
                 risk = np.zeros_like(O)
-            b_rel = 0.0 if ctx.on_ac else p.energy_wh / e_ref
+            # mode gate: judge a non-NORMAL mode by its pessimistic energy ratio
+            # r * exp(kappa * rel_sigma), so a mode is only picked when its predicted
+            # saving is larger than the uncertainty of that prediction (counters the
+            # winner's curse of choosing the minimum of several noisy estimates)
+            gate = 1.0
+            if self.spec.mode_gate and m != "NORMAL":
+                gate = self._robust_factor(m, p.energy_wh / e_ref, getattr(p, "rel_sigma", 0.0), sc.mode_gate_kappa)
+                c_rel = c_rel * gate
+            b_rel = 0.0 if ctx.on_ac else p.energy_wh / e_ref * gate
             c_carbon = (w.carbon * c_rel * (1 + w.risk * risk)) if self.spec.use_carbon else np.zeros_like(O)
             c_batt = (w.battery * u * b_rel) if self.spec.use_battery else 0.0
             c_lat = w.latency * (O + p.q50) / max(slack, 1e-6)
@@ -200,27 +235,30 @@ class RBACIPolicy(Policy):
 
 def make_specs(cfg: Config) -> dict[str, PolicySpec]:
     W = cfg.weights
+    nai = dict(uncertainty=False, adaptive=False, mode_gate=False)
     return {
-        "carbon_only": PolicySpec("carbon_only", use_battery=False, modes=["NORMAL"], predictor="table",
-                                  uncertainty=False, weights=W),
-        "battery_only": PolicySpec("battery_only", use_carbon=False, allow_defer=False, predictor="table",
-                                   uncertainty=False, weights=W),
-        "combined_noai": PolicySpec("combined_noai", predictor="table", uncertainty=False, weights=W),
-        "greenthread": PolicySpec("greenthread", predictor="ml", uncertainty=True, weights=W),
-        # ablations of GreenThread (one component removed each)
-        "gt_no_uncertainty": PolicySpec("gt_no_uncertainty", predictor="ml", uncertainty=False, weights=W),
+        "carbon_only": PolicySpec("carbon_only", use_battery=False, modes=["NORMAL"], predictor="table", weights=W, **nai),
+        "battery_only": PolicySpec("battery_only", use_carbon=False, allow_defer=False, predictor="table", weights=W, **nai),
+        "combined_noai": PolicySpec("combined_noai", predictor="table", weights=W, **nai),
+        "greenthread": PolicySpec("greenthread", predictor="ml", weights=W),
+        # ablations of GreenThread (one component removed or replaced each)
+        "gt_no_uncertainty": PolicySpec("gt_no_uncertainty", predictor="ml", uncertainty=False, adaptive=False, weights=W),
+        "gt_fixed_conf": PolicySpec("gt_fixed_conf", predictor="ml", adaptive=False, weights=W),
+        "gt_no_gate": PolicySpec("gt_no_gate", predictor="ml", mode_gate=False, weights=W),
         "gt_no_quantile": PolicySpec("gt_no_quantile", predictor="ml", quantile_constraint=False, weights=W),
-        "gt_no_ml": PolicySpec("gt_no_ml", predictor="table", uncertainty=True, weights=W),
+        "gt_no_ml": PolicySpec("gt_no_ml", predictor="table", weights=W),
         "gt_no_defer": PolicySpec("gt_no_defer", predictor="ml", allow_defer=False, weights=W),
         "gt_no_modes": PolicySpec("gt_no_modes", predictor="ml", modes=["NORMAL"], weights=W),
         "gt_no_carbon": PolicySpec("gt_no_carbon", predictor="ml", use_carbon=False, weights=W),
         "gt_no_battery": PolicySpec("gt_no_battery", predictor="ml", use_battery=False, weights=W),
+        # version 1 of GreenThread (fixed-decay confidence, no gate) for before/after comparison
+        "greenthread_v1": PolicySpec("greenthread_v1", predictor="ml", adaptive=False, mode_gate=False, weights=W),
     }
 
 
 BASELINES = ["default", "heuristic", "carbon_only", "battery_only", "combined_noai", "greenthread"]
-ABLATIONS = ["greenthread", "gt_no_uncertainty", "gt_no_quantile", "gt_no_ml", "gt_no_defer",
-             "gt_no_modes", "gt_no_carbon", "gt_no_battery"]
+ABLATIONS = ["greenthread", "greenthread_v1", "gt_no_uncertainty", "gt_fixed_conf", "gt_no_gate", "gt_no_quantile",
+             "gt_no_ml", "gt_no_defer", "gt_no_modes", "gt_no_carbon", "gt_no_battery"]
 
 
 def build_policy(name: str, cfg: Config, ml: Predictor | None, table: Predictor | None) -> Policy:

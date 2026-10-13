@@ -16,6 +16,7 @@ class Job:
     deadline_s: float = 1e9   # absolute engine time it must finish by
     deferrable: bool = False  # explicitly allowed to start later
     interactive: bool = False # latency-sensitive: never deferred/throttled
+    deadline_factor: float | None = None  # deadline = factor x predicted NORMAL runtime (portable)
 
     @property
     def relative_deadline(self) -> float:
@@ -29,6 +30,7 @@ class Prediction:
     cpu_s: float             # predicted CPU-seconds
     energy_wh: float         # predicted incremental energy (Wh)
     source: str = "model"
+    rel_sigma: float = 0.0   # log-sd of this mode's prediction relative to NORMAL
 
 
 @dataclass
@@ -90,4 +92,17 @@ def load_jobs(path: str | Path) -> list[Job]:
         if "relative_deadline_s" in d:
             d["deadline_s"] = d.get("arrival_s", 0.0) + d.pop("relative_deadline_s")
         jobs.append(Job(**d))
+    return jobs
+
+
+def resolve_relative_deadlines(jobs: list[Job], predictor, ctx=None) -> list[Job]:
+    """Turn `deadline_factor` into absolute deadlines using the predicted NORMAL-mode
+    median runtime on *this* machine, so the same job file is equally tight on any
+    laptop. Done once, before any policy runs, so every policy gets identical deadlines."""
+    for j in jobs:
+        if j.deadline_factor:
+            if predictor is None:
+                raise RuntimeError(f"job {j.id} uses deadline_factor: train a model first")
+            q50 = predictor.predict(j, "NORMAL", ctx).q50   # ctx: this machine, idle
+            j.deadline_s = j.arrival_s + j.deadline_factor * q50
     return jobs
