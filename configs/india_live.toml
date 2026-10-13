@@ -1,0 +1,14 @@
+# Live mode: Electricity Maps zone for southern India. Set the token first:
+#   PowerShell:  $env:ELECTRICITYMAPS_TOKEN = "<your token>"
+# If the API is unreachable or the token lacks access, GreenThread keeps the last
+# cached value, lets its confidence decay, and stops deferring (safe fallback).
+[carbon]
+source = "electricitymaps"
+zone = "IN-SO"
+static_value = 700.0          # prior until real history is available (assumption)
+freshness_half_life_s = 3600.0
+forecast_half_life_h = 12.0
+
+[scheduler]
+defer_step_s = 300.0
+max_concurrent = 1

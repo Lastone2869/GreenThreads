@@ -1,0 +1,36 @@
+{
+  "backend": "posix",
+  "capabilities": {
+    "os_name": "Linux 6.18.44-fc-v114",
+    "os_build": "",
+    "logical_cpus": 2,
+    "physical_cores": 2,
+    "cpu_model": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+    "cpu_sets": [],
+    "heterogeneous": false,
+    "ecoqos": false,
+    "priority": true,
+    "affinity": true,
+    "cpu_rate_cap": false,
+    "battery_present": false,
+    "battery_energy_counter": false,
+    "power_meter": "model",
+    "notes": [
+      "Non-Windows backend: ECO = nice(10) only (no EcoQoS); for testing"
+    ]
+  },
+  "supported_modes": [
+    "NORMAL",
+    "ECO",
+    "HALF",
+    "ECO_HALF"
+  ],
+  "power": {
+    "on_ac": true,
+    "percent": null,
+    "remaining_mwh": null,
+    "full_mwh": null,
+    "discharge_mw": null,
+    "source": "no-battery"
+  }
+}

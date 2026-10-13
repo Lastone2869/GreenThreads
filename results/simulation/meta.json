@@ -1,0 +1,26 @@
+{
+  "machine": {
+    "logical_cpus": 8,
+    "physical_cores": 4,
+    "p_active_w": 3.0,
+    "p_core_w": 4.5,
+    "eco_power_ratio": 0.58,
+    "eco_slowdown": 1.35,
+    "runtime_noise": 0.1,
+    "modes": [
+      "NORMAL",
+      "ECO",
+      "HALF",
+      "ECO_HALF"
+    ]
+  },
+  "pred_sigma": {
+    "source": "results/model_metrics.json",
+    "ml": 0.14514681325083098,
+    "table": 0.2569735310116113
+  },
+  "days": 14,
+  "seeds": 10,
+  "note": "Simulation: energy from SimMachine model (assumptions), carbon from real 2020 traces (DE/GB/FR/US-CAL; ENTSO-E/CAISO via Let's Wait Awhile) and one SYNTHETIC India trace.",
+  "runtime_s": 426.146769285202
+}

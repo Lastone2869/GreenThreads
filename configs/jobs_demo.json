@@ -1,0 +1,13 @@
+{
+  "description": "Mixed workload for the compressed-time demo (engine seconds; 10 s = 1 trace hour).",
+  "jobs": [
+    {"id": "probe-early",  "kind": "probe",    "units": 40,   "threads": 1, "arrival_s": 0,  "relative_deadline_s": 60,  "interactive": true},
+    {"id": "backup",       "kind": "compress", "units": 600,  "threads": 1, "arrival_s": 2,  "relative_deadline_s": 130, "deferrable": true},
+    {"id": "build",        "kind": "hash",     "units": 4000, "threads": 2, "arrival_s": 5,  "relative_deadline_s": 25},
+    {"id": "ml-train",     "kind": "matmul",   "units": 150,  "threads": 2, "arrival_s": 10, "relative_deadline_s": 140, "deferrable": true},
+    {"id": "index",        "kind": "hash",     "units": 3000, "threads": 1, "arrival_s": 20, "relative_deadline_s": 110, "deferrable": true},
+    {"id": "tests",        "kind": "compress", "units": 300,  "threads": 2, "arrival_s": 35, "relative_deadline_s": 20},
+    {"id": "probe-late",   "kind": "probe",    "units": 40,   "threads": 1, "arrival_s": 60, "relative_deadline_s": 60,  "interactive": true},
+    {"id": "export",       "kind": "matmul",   "units": 100,  "threads": 2, "arrival_s": 70, "relative_deadline_s": 60,  "deferrable": true}
+  ]
+}
