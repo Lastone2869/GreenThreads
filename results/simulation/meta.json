@@ -1,11 +1,11 @@
 {
   "machine": {
-    "logical_cpus": 8,
-    "physical_cores": 4,
+    "logical_cpus": 16,
+    "physical_cores": 8,
     "p_active_w": 3.0,
-    "p_core_w": 4.5,
-    "eco_power_ratio": 0.58,
-    "eco_slowdown": 1.35,
+    "p_core_w": 1.4204187462429665,
+    "eco_power_ratio": 1.0268671419827688,
+    "eco_slowdown": 1.0041730013773233,
     "runtime_noise": 0.11905595492672125,
     "modes": [
       "NORMAL",
@@ -16,23 +16,23 @@
   },
   "predictor_errors": {
     "sigma": {
-      "ml": 0.08178079187103357,
-      "table": 0.21191060362012698
+      "ml": 0.11783286100644509,
+      "table": 0.42148431035434386
     },
     "sigma_rel": {
       "ml": 0.02,
-      "table": 0.09773483956606956
+      "table": 0.10750790419857334
     },
     "bias": {
-      "ml": 0.026795795044137767,
-      "table": 0.027772982016398322
+      "ml": 0.015257160675023607,
+      "table": 0.006824866634724889
     },
     "noise": 0.11905595492672125,
-    "source": "results/model_metrics.json"
+    "source": "results\\model_metrics.json"
   },
   "days": 14,
   "seeds": 10,
   "windows": "test split: 14-day windows starting 2020-07-01 + 14*seed days (Jul-Dec); tuning split (kappa sweep only): windows from 2020-01-15 (Jan-Jun)",
   "note": "Simulation: energy from SimMachine model (assumptions unless --calibrate with measured data), carbon from real 2020 traces (DE/GB/FR/US-CAL; ENTSO-E/CAISO via Let's Wait Awhile) and one SYNTHETIC India trace.",
-  "runtime_s": 2199.2509427070618
+  "runtime_s": 852.5294389724731
 }

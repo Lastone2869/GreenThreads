@@ -81,6 +81,7 @@ def test_linux_topology_and_hybrid(tmp_path):
     assert {t.logical_index for t in topo if t.efficiency_class == 0} == {4, 5, 6, 7}
 
 
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="':' is not allowed in Windows paths (fake Linux sysfs)")
 def test_rapl_wraparound(tmp_path):
     z = tmp_path / "sys/class/powercap/intel-rapl:0"
     _w(z / "energy_uj", 999_000_000)

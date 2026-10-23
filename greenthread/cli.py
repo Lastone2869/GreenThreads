@@ -329,11 +329,16 @@ def cmd_ledger_study(cfg, a):
     from .ledger_study import run_study
     traces = [f"data/traces/{t}.csv" for t in a.traces.split(",")]
     run_study(cfg, traces, cfg.resolve(cfg.results_dir) / "ledger")
-    print((cfg.resolve(cfg.results_dir) / "ledger" / "LEDGER_STUDY.md").read_text())
+    print((cfg.resolve(cfg.results_dir) / "ledger" / "LEDGER_STUDY.md").read_text(encoding="utf-8"))
 
 
 def cmd_report(cfg, a):
     from .report import write
+    print("wrote", write(cfg, a.out))
+
+
+def cmd_dashboard(cfg, a):
+    from .dashboard import write
     print("wrote", write(cfg, a.out))
 
 
@@ -395,6 +400,8 @@ def main(argv=None):
     s = sub.add_parser("ledger", help="show battery carbon ledger"); s.set_defaults(fn=cmd_ledger)
     s = sub.add_parser("report", help="regenerate docs/TEST_REPORT.md from results/"); s.add_argument("--out")
     s.set_defaults(fn=cmd_report)
+    s = sub.add_parser("dashboard", help="generate self-contained HTML dashboard for demo/viva"); s.add_argument("--out")
+    s.set_defaults(fn=cmd_dashboard)
     s = sub.add_parser("cross-machine", help="evaluate another machine's model on this machine's data")
     s.add_argument("--model", required=True); s.set_defaults(fn=cmd_cross_machine)
     s = sub.add_parser("carbon-log", help="record live grid intensity into a replayable CSV")

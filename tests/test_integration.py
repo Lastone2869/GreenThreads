@@ -19,6 +19,17 @@ from greenthread.simulator import SimScenario, simulate, summarise
 from tests.test_policy_model import FakePred
 
 
+class _ACBackend:
+    def __init__(self, target):
+        self._target = target
+    def __getattr__(self, item):
+        return getattr(self._target, item)
+    def power_status(self):
+        ps = self._target.power_status()
+        from greenthread.backends.base import PowerStatus
+        return PowerStatus(True, ps.percent, ps.remaining_mwh, ps.full_mwh, 0.0, ps.source)
+
+
 def make_engine(policy, trace_csv, backend=None, seconds_per_hour=2.0):
     cfg = Config()
     cfg.scheduler.tick_s = 0.05
@@ -26,7 +37,8 @@ def make_engine(policy, trace_csv, backend=None, seconds_per_hour=2.0):
     src = CSVReplaySource(trace_csv, "2020-01-01T08:00:00", seconds_per_hour)
     sig = CarbonSignal(src, prior=src.mean, freshness_half_life_s=3600)
     led = BatteryCarbonLedger(None, 0.85, 500)
-    return Engine(cfg, backend or get_backend(), policy, sig, src, led, PowerModel(), None, verbose=False)
+    b = backend or get_backend()
+    return Engine(cfg, _ACBackend(b), policy, sig, src, led, PowerModel(), None, verbose=False)
 
 
 class ShortPred(FakePred):

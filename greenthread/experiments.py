@@ -55,7 +55,7 @@ def run_real_experiment(cfg: Config, a) -> pd.DataFrame:
     df = pd.DataFrame(rows)
     summary = summarise_real(df)
     summary.to_csv(out_dir / "summary.csv", index=False)
-    (out_dir / "summary.md").write_text(summary_markdown(summary, df))
+    (out_dir / "summary.md").write_text(summary_markdown(summary, df), encoding="utf-8")
     print("\n" + summary.to_string(index=False))
     return df
 
@@ -119,7 +119,7 @@ def _pred_sigma_from_metrics(path: str | None) -> dict:
          "bias": {"ml": 0.0, "table": 0.0}, "noise": 0.108, "source": "defaults (dev-machine metrics)"}
     if not path or not Path(path).exists():
         return d
-    m = json.loads(Path(path).read_text())["temporal_split"]
+    m = json.loads(Path(path).read_text(encoding="utf-8"))["temporal_split"]
     mc = m.get("mode_comparison", {}).get("cpu_ratio_model_error_noise_removed", {})
     d["sigma"] = {"ml": m["ml"].get("model_log_err_sd", m["ml"]["log_err_sd"]),
                   "table": m["table"].get("model_log_err_sd", m["table"]["log_err_sd"])}

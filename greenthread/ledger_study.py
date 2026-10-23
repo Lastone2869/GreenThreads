@@ -208,7 +208,7 @@ def run_study(cfg, traces: list[str], out_dir: str | Path) -> pd.DataFrame:
         L.append(f"| {r.trace} | {r.profile} | {r.battery_wh/1000:.1f} | {r.carbon_ledger_g/1000:.2f} | "
                  f"{r.carbon_time_of_use_g/1000:.2f} | {r.tou_error_pct:+.1f}% | {r.hours_battery_cleaner_than_grid_pct:.0f} |")
     L += ["", "Zero accounting reports 0 kg in every row (-100 %)."]
-    (out / "LEDGER_STUDY.md").write_text("\n".join(L) + "\n")
+    (out / "LEDGER_STUDY.md").write_text("\n".join(L) + "\n", encoding="utf-8")
     _plot(df, out)
     return df
 

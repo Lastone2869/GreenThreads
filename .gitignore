@@ -1,9 +1,33 @@
+# Virtual environment & Python caches
 .venv/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 .pytest_cache/
-results/carbon_cache.json
-results/simulation/*_jobs.csv.gz
+*.egg-info/
+build/
+dist/
+
+# Sensitive tokens & cache
 secrets/
 results/carbon_cache.json
 results/carbon_signal_state.json
+
+# Large simulation output jobs
+results/simulation/*_jobs.csv.gz
+
+# Transient run outputs & local logs
+results/run_*.csv
+results/decisions_*.jsonl
+results/carbon_log.csv
+
+# Local IDE, Agent customizations & scratch
+.agents/
+scratch/
+.vscode/
+.idea/
+
+# OS artifacts
+Thumbs.db
+.DS_Store

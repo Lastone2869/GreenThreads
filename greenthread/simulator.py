@@ -325,16 +325,58 @@ def ci95(x: pd.Series) -> tuple[float, float, float]:
 
 
 def calibrate_from_csv(df: pd.DataFrame, machine: SimMachine) -> SimMachine:
-    """Set ECO slowdown from measured runtime ratios (and power ratio if measured)."""
-    d = df[df.bg_threads == 0] if "bg_threads" in df else df
+    """Set core counts, ECO slowdown, and ECO power ratio from measured laptop data."""
+    from pathlib import Path
+    import json
+
+    # 1. Hardware topology: prefer capabilities.json or latest rows in df
+    caps_path = Path("results/capabilities.json")
+    if caps_path.exists():
+        try:
+            caps = json.loads(caps_path.read_text()).get("capabilities", {})
+            if "logical_cpus" in caps:
+                machine.logical_cpus = int(caps["logical_cpus"])
+            if "physical_cores" in caps:
+                machine.physical_cores = int(caps["physical_cores"])
+        except Exception:
+            pass
+    elif "logical_cpus" in df and df.logical_cpus.notna().any():
+        machine.logical_cpus = int(df.logical_cpus.dropna().iloc[-1])
+        if "physical_cores" in df and df.physical_cores.notna().any():
+            machine.physical_cores = int(df.physical_cores.dropna().iloc[-1])
+
+    # Filter to this machine's rows if mixed
+    d = df[df.logical_cpus == machine.logical_cpus] if "logical_cpus" in df else df
+    d = d[d.bg_threads == 0] if "bg_threads" in d else d
+
+    # 2. Runtime slowdown
     piv = d.groupby(["kind", "units", "threads", "mode"]).runtime_s.median().unstack("mode")
     if {"NORMAL", "ECO"} <= set(piv.columns):
-        r = (piv["ECO"] / piv["NORMAL"]).dropna()
+        r = (piv["ECO"] / piv["NORMAL"]).replace([np.inf, -np.inf], np.nan).dropna()
         if len(r):
             machine.eco_slowdown = float(r.median())
+
+    # 3. Core power ratio: prefer calibrated multi-step power model if available
+    pm_path = Path("results/power_model.json")
+    if pm_path.exists():
+        try:
+            pm = json.loads(pm_path.read_text())
+            if "per_core_w_normal" in pm and "per_core_w_eco" in pm and pm["per_core_w_normal"] > 0:
+                machine.p_core_w = float(pm["per_core_w_normal"])
+                machine.eco_power_ratio = float(pm["per_core_w_eco"] / pm["per_core_w_normal"])
+                return machine
+        except Exception:
+            pass
+
+    # Fallback to training data measured energy if power_model.json is absent
     if "energy_wh_measured" in d and d.energy_wh_measured.notna().sum() > 10:
-        e = d.dropna(subset=["energy_wh_measured"]).groupby(["kind", "units", "threads", "mode"]).energy_wh_measured.median().unstack("mode")
+        valid_e = d[d.energy_wh_measured > 0.0005]
+        e = valid_e.groupby(["kind", "units", "threads", "mode"]).energy_wh_measured.median().unstack("mode")
         if {"NORMAL", "ECO"} <= set(e.columns):
-            er = (e["ECO"] / e["NORMAL"]).dropna().median()
-            machine.eco_power_ratio = float(er / machine.eco_slowdown)
+            ratios = (e["ECO"] / e["NORMAL"]).replace([np.inf, -np.inf], np.nan).dropna()
+            ratios = ratios[(ratios > 0.2) & (ratios < 5.0)]
+            if len(ratios):
+                er = float(ratios.median())
+                machine.eco_power_ratio = float(np.clip(er / max(machine.eco_slowdown, 0.1), 0.5, 2.0))
     return machine
+

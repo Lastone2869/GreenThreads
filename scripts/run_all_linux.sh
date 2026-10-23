@@ -37,4 +37,4 @@ if [[ -f secrets/electricitymaps.token ]]; then
   $GT --config configs/india_live.toml carbon-log --hours 1 --interval 1800
 fi
 python -m pytest -q | tee results/pytest_output.txt
-echo "13. Regenerate docs/TEST_REPORT.md";                $GT report
+echo "13. Regenerate docs/TEST_REPORT.md and docs/DASHBOARD.html"; $GT report; $GT dashboard

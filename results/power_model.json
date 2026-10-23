@@ -1,0 +1,7 @@
+{
+  "idle_w": 24.80033424133512,
+  "per_core_w_normal": 0.8587186270450294,
+  "per_core_w_eco": 1.2652397619193074,
+  "source": "battery discharge",
+  "samples": 96
+}

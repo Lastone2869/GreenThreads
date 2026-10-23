@@ -46,6 +46,7 @@ if ($live) {
     python -m greenthread --config configs\india_live.toml carbon-log --hours 1 --interval 1800
 }
 python -m pytest -q | Tee-Object -FilePath results\pytest_output.txt
-Write-Host "13. Regenerate docs\TEST_REPORT.md from all results"
+Write-Host "13. Regenerate docs\TEST_REPORT.md and docs\DASHBOARD.html from all results"
 python -m greenthread report
-Write-Host "Done. Open docs\TEST_REPORT.md"
+python -m greenthread dashboard
+Write-Host "Done. Open docs\DASHBOARD.html and docs\TEST_REPORT.md"

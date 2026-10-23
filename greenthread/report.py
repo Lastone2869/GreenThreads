@@ -18,9 +18,23 @@ import pandas as pd
 from .config import Config, PACKAGE_ROOT
 
 
+def _read_text(p: Path) -> str:
+    try:
+        raw = p.read_bytes()
+    except Exception:
+        return ""
+    for enc in ("utf-8-sig", "utf-8", "cp1252", "utf-16"):
+        try:
+            return raw.decode(enc)
+        except (UnicodeDecodeError, LookupError):
+            continue
+    return raw.decode("utf-8", errors="replace")
+
+
 def _j(p: Path):
     try:
-        return json.loads(p.read_text())
+        txt = _read_text(p)
+        return json.loads(txt) if txt else None
     except Exception:
         return None
 
@@ -63,7 +77,7 @@ def build(cfg: Config) -> str:
     led_field = _j(R / "ledger_report.json")
     clog = _csv(cfg.resolve(cfg.carbon.log_path))
     sig_state = _j(cfg.resolve(cfg.carbon.signal_state_path))
-    pyt = (R / "pytest_output.txt").read_text() if (R / "pytest_output.txt").exists() else ""
+    pyt = _read_text(R / "pytest_output.txt") if (R / "pytest_output.txt").exists() else ""
     exps = sorted(R.glob("experiment_*/summary.md"))
     L: list[str] = []
     A = L.append
@@ -154,7 +168,7 @@ def build(cfg: Config) -> str:
                      if "assumed" in tag else "")
             A(f"### `{tag}` — {desc.get(tag.split('_')[0], tag)}{extra}")
             A("")
-            A(p.read_text().strip())
+            A(_read_text(p).strip())
             A("")
     else:
         A("_Run `experiment` (see `scripts/run_all_*`)._")
@@ -390,5 +404,6 @@ def _verdicts(e, met, led, pm, td, exps):
 
 def write(cfg: Config, path: str | Path | None = None) -> Path:
     p = Path(path) if path else PACKAGE_ROOT / "docs" / "TEST_REPORT.md"
-    p.write_text(build(cfg))
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(build(cfg), encoding="utf-8")
     return p
